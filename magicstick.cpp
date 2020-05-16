@@ -48,21 +48,21 @@ public:
                 for (auto& datumPtr : *datumsPtr)
                 {
                     cv::Mat cvOutputData = OP_OP2CVMAT(datumPtr->cvOutputData);
-
-                    const auto& poseKeypoints = datumPtr->poseKeypoints;
-                    double RElbowx = poseKeypoints[{0, 3, 0}];
-                    double RElbowy = poseKeypoints[{0, 3, 1}];
-                    double RWristx = poseKeypoints[{0, 4, 0}];
-                    double RWristy = poseKeypoints[{0, 4, 1}];
-                    vector<int>stick_end(2);
-                    stick_end[0] = (int)(RWristx + STICK_RELATIVE_LENGTH * (RWristx - RElbowx));
-                    stick_end[1] = (int)(RWristy + STICK_RELATIVE_LENGTH * (RWristy - RElbowy));
-                    if(stick_point.size() == 0)
-                    {
-                        stick_point.push_back(stick_end);
-                    }
-                    vector<int>stick_last = stick_point.back();
-                    if(pow(stick_last[0] - stick_end[0],2) + pow(stick_last[1] - stick_end[1],2) <= MIN_VELOCITY)
+                    for (auto person = 0 ; person < poseKeypoints.getSize(0) ; person++){
+                        const auto& poseKeypoints = datumPtr->poseKeypoints;
+                        double RElbowx = poseKeypoints[{person, 3, 0}];
+                        double RElbowy = poseKeypoints[{person, 3, 1}];
+                        double RWristx = poseKeypoints[{person, 4, 0}];
+                        double RWristy = poseKeypoints[{person, 4, 1}];
+                        vector<int>stick_end(2);
+                        stick_end[0] = (int)(RWristx + STICK_RELATIVE_LENGTH * (RWristx - RElbowx));
+                        stick_end[1] = (int)(RWristy + STICK_RELATIVE_LENGTH * (RWristy - RElbowy));
+                        if(stick_point.size() == 0)
+                        {
+                            stick_point.push_back(stick_end);
+                        }
+                        vector<int>stick_last = stick_point.back();
+                        if(pow(stick_last[0] - stick_end[0],2) + pow(stick_last[1] - stick_end[1],2) <= MIN_VELOCITY)
                     {
                         fin_state = (fin_state + 1) % DURATION;
                         if (fin_state == 0 && stick_point.size() >= EXCLUTION)
@@ -136,27 +136,31 @@ public:
                             op::opLog("over! ", op::Priority::High);
                             // std::cout<<""<<std::endl;
                             stick_point.clear();
-                        }
                     }
-                    else if(fin_state == 0 && stick_point.size() < EXCLUTION)
+                    
+                        }
+
+                        else if(fin_state == 0 && stick_point.size() < EXCLUTION)
                     {
                         stick_point.clear();
                     }
-                    else{
-                        stick_point.push_back(stick_end);
-                    }
-                    // stick_point.push_back(stick_end);
+                        else{
+                            stick_point.push_back(stick_end);
+                        }
+                        // stick_point.push_back(stick_end);
 
-                    
-                    cv::Point current_stick_end(stick_end[0],stick_end[1]);
-                    cv::circle(cvOutputData, current_stick_end, 5, cv::Scalar(0, 0, 255), -1);
-                    for (int i = 1; i<stick_point.size(); ++i )
-                    {
-                        cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
-                        cv::Point b(stick_point[i][0],stick_point[i][1]);
-                        cv::line(cvOutputData, a, b, cv::Scalar(0, 255, 0), 10);
+
+                        cv::Point current_stick_end(stick_end[0],stick_end[1]);
+                        cv::circle(cvOutputData, current_stick_end, 5, cv::Scalar(0, 0, 255), -1);
+                        for (int i = 1; i<stick_point.size(); ++i )
+                        {
+                            cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
+                            cv::Point b(stick_point[i][0],stick_point[i][1]);
+                            cv::line(cvOutputData, a, b, cv::Scalar(0, 255, 0), 10);
+                        }
+
+                        // cv::bitwise_not(cvOutputData, cvOutputData);
                     }
-                    // cv::bitwise_not(cvOutputData, cvOutputData);
                 }
             }
         }
@@ -284,11 +288,11 @@ void configureWrapper(op::Wrapper& opWrapper)
     }
 }
 
-int openPoseDemo()
+int openPose()
 {
     try
     {
-        op::opLog("Starting OpenPose demo...", op::Priority::High);
+        op::opLog("Starting OpenPose ...", op::Priority::High);
         const auto opTimer = op::getTimerInit();
 
         // Configure OpenPose
@@ -301,7 +305,7 @@ int openPoseDemo()
         opWrapper.exec();
 
         // Measuring total time
-        op::printTime(opTimer, "OpenPose demo successfully finished. Total time: ", " seconds.", op::Priority::High);
+        op::printTime(opTimer, "OpenPose successfully finished. Total time: ", " seconds.", op::Priority::High);
 
         // Return successful message
         return 0;
@@ -317,6 +321,6 @@ int main(int argc, char *argv[])
     // Parsing command line flags
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    // Running openPoseDemo
-    return openPoseDemo();
+    // Running openPose
+    return openPose();
 }
