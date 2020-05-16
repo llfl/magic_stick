@@ -55,110 +55,135 @@ public:
                         double RElbowy = poseKeypoints[{person, 3, 1}];
                         double RWristx = poseKeypoints[{person, 4, 0}];
                         double RWristy = poseKeypoints[{person, 4, 1}];
-                        vector<int>stick_end(2);
-                        stick_end[0] = (int)(RWristx + STICK_RELATIVE_LENGTH * (RWristx - RElbowx));
-                        stick_end[1] = (int)(RWristy + STICK_RELATIVE_LENGTH * (RWristy - RElbowy));
-                        if(stick_point.size() == 0)
-                        {
-                            stick_point.push_back(stick_end);
-                        }
-                        vector<int>stick_last = stick_point.back();
-                        if(pow(stick_last[0] - stick_end[0],2) + pow(stick_last[1] - stick_end[1],2) <= MIN_VELOCITY)
-                    {
-                        fin_state = (fin_state + 1) % DURATION;
-                        if (fin_state == 0 && stick_point.size() >= EXCLUTION)
-                        {
-                            cv::Mat stick_pattern(cvOutputData.rows, cvOutputData.cols, CV_8UC1, 255);
-                            int minx, maxx, miny, maxy;
-                            minx = stick_point[0][0];
-                            maxx = stick_point[0][0];
-                            miny = stick_point[0][1];
-                            maxy = stick_point[0][1];
-
-                            for (int i = 1; i<stick_point.size(); ++i )
+                        double stick_lenght = 0.0
+                        for(int stick_scale = 3;true;stick_scale++){
+                            cv::Rect area(int(RWristx), int(RWristy) , 
+                            (int)(RWristx + stick_scale * (RWristx - RElbowx)),
+                            (int)(RWristy + stick_scale * (RWristy - RElbowy)));
+                        
+                            cv::Mat crop_stick = stick_pattern(area);
+                            cv::cvtColor(crop_stick, crop_stick, COLOR_RGB2GRAY);
+                            cv::Canny(crop_stick, crop_stick, 80, 180, 3, false);
+                            cv::threshold(crop_stick, crop_stick, 170, 255, THRESH_BINARY);
+                            vector<Vec2f> lines;
+                            cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 150, 0, 0);
+                            for( size_t i = 0; i < lines.size(); i++ )
                             {
-                                // stick_pattern.at<cv::Vec3b>(stick_point[i][0],stick_point[i][1]) = 0;
-                                if(minx>stick_point[i][0])minx = stick_point[i][0];
-                                if(maxx<stick_point[i][0])maxx = stick_point[i][0];
-                                if(miny>stick_point[i][1])miny = stick_point[i][1];
-                                if(maxy<stick_point[i][1])maxy = stick_point[i][1];
-
-                                cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
-                                cv::Point b(stick_point[i][0],stick_point[i][1]);
-                                cv::line(stick_pattern, a, b, 0, 10);
+                                line( crop_stick, Point(lines[i][0], lines[i][1]),
+                                Point( lines[i][2], lines[i][3]), Scalar(0,0,255), 3, 8 );
                             }
-                            int long_side = maxx-minx;
-                            if(long_side < maxy-miny) long_side = maxy - miny;
-                            cv::Rect area(minx-16, miny-16 , long_side+16,long_side+16);
-                            // cv::Mat resize_pattern = stick_pattern(area);
-                            cv::Mat crop_pattern = stick_pattern(area);
-                            cv::Mat resize_pattern(28, 28, CV_8UC1);
-                            cv::resize(crop_pattern, resize_pattern, cv::Size(28,28));
-                            cv::Mat flip_pattern;
-                            cv::flip(resize_pattern,flip_pattern, 1);
-                            cv::Mat float_pattern;
-                            flip_pattern.convertTo(float_pattern, CV_32FC1);
-                            // cv::Mat normalized_pattern;
-                            // cv::subtract(float_pattern, mean_, normalized_pattern);
-                            pattern_no ++;
-                            // cv::imshow(std::to_string(pattern_no), resize_pattern);
-                            cv::imwrite(std::to_string(pattern_no)+"hello2.jpg", flip_pattern);
+                            imshow( "Source", crop_stick );
+                            waitKey(0);
+                            break;
 
-                            // caffe::Caffe::set_mode(caffe::Caffe::GPU);
-                            // caffe::Net<float> lenet("models/lenet.prototxt",caffe::TEST);
-                            // lenet.CopyTrainedLayersFrom("models/lenet_iter_10000.caffemodel");
-                            // caffe::Blob<float> *input_ptr = lenet.input_blobs()[0];
-                            // input_ptr->Reshape(1,1,28,28);
 
-                            // caffe::Blob<float> *output_ptr= lenet.output_blobs()[0];
-                            // output_ptr->Reshape(1,10,1,1);
 
-                            // input_ptr->set_cpu_data(reinterpret_cast<float*>(float_pattern.data));
-                            // lenet.Forward();
-                            // const float* begin = output_ptr->gpu_data();
+                        }
+                        
+                    //     vector<int>stick_end(2);
+                    //     stick_end[0] = (int)(RWristx + STICK_RELATIVE_LENGTH * (RWristx - RElbowx));
+                    //     stick_end[1] = (int)(RWristy + STICK_RELATIVE_LENGTH * (RWristy - RElbowy));
+                    //     if(stick_point.size() == 0)
+                    //     {
+                    //         stick_point.push_back(stick_end);
+                    //     }
+                    //     vector<int>stick_last = stick_point.back();
+                    //     if(pow(stick_last[0] - stick_end[0],2) + pow(stick_last[1] - stick_end[1],2) <= MIN_VELOCITY)
+                    // {
+                    //     fin_state = (fin_state + 1) % DURATION;
+                    //     if (fin_state == 0 && stick_point.size() >= EXCLUTION)
+                    //     {
+                    //         cv::Mat stick_pattern(cvOutputData.rows, cvOutputData.cols, CV_8UC1, 255);
+                    //         int minx, maxx, miny, maxy;
+                    //         minx = stick_point[0][0];
+                    //         maxx = stick_point[0][0];
+                    //         miny = stick_point[0][1];
+                    //         maxy = stick_point[0][1];
+
+                    //         for (int i = 1; i<stick_point.size(); ++i )
+                    //         {
+                    //             // stick_pattern.at<cv::Vec3b>(stick_point[i][0],stick_point[i][1]) = 0;
+                    //             if(minx>stick_point[i][0])minx = stick_point[i][0];
+                    //             if(maxx<stick_point[i][0])maxx = stick_point[i][0];
+                    //             if(miny>stick_point[i][1])miny = stick_point[i][1];
+                    //             if(maxy<stick_point[i][1])maxy = stick_point[i][1];
+
+                    //             cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
+                    //             cv::Point b(stick_point[i][0],stick_point[i][1]);
+                    //             cv::line(stick_pattern, a, b, 0, 10);
+                    //         }
+                    //         int long_side = maxx-minx;
+                    //         if(long_side < maxy-miny) long_side = maxy - miny;
+                    //         cv::Rect area(minx-16, miny-16 , long_side+16,long_side+16);
+                    //         // cv::Mat resize_pattern = stick_pattern(area);
+                    //         cv::Mat crop_pattern = stick_pattern(area);
+                    //         cv::Mat resize_pattern(28, 28, CV_8UC1);
+                    //         cv::resize(crop_pattern, resize_pattern, cv::Size(28,28));
+                    //         cv::Mat flip_pattern;
+                    //         cv::flip(resize_pattern,flip_pattern, 1);
+                    //         cv::Mat float_pattern;
+                    //         flip_pattern.convertTo(float_pattern, CV_32FC1);
+                    //         // cv::Mat normalized_pattern;
+                    //         // cv::subtract(float_pattern, mean_, normalized_pattern);
+                    //         pattern_no ++;
+                    //         // cv::imshow(std::to_string(pattern_no), resize_pattern);
+                    //         cv::imwrite(std::to_string(pattern_no)+"hello2.jpg", flip_pattern);
+
+                    //         // caffe::Caffe::set_mode(caffe::Caffe::GPU);
+                    //         // caffe::Net<float> lenet("models/lenet.prototxt",caffe::TEST);
+                    //         // lenet.CopyTrainedLayersFrom("models/lenet_iter_10000.caffemodel");
+                    //         // caffe::Blob<float> *input_ptr = lenet.input_blobs()[0];
+                    //         // input_ptr->Reshape(1,1,28,28);
+
+                    //         // caffe::Blob<float> *output_ptr= lenet.output_blobs()[0];
+                    //         // output_ptr->Reshape(1,10,1,1);
+
+                    //         // input_ptr->set_cpu_data(reinterpret_cast<float*>(float_pattern.data));
+                    //         // lenet.Forward();
+                    //         // const float* begin = output_ptr->gpu_data();
     
 
-                            // int index=0;
-                            // for(int i=1;i<10;i++)
-                            // {
-                            //     if(begin[index]<begin[i])
-                            //         index=i;
-                            // }
+                    //         // int index=0;
+                    //         // for(int i=1;i<10;i++)
+                    //         // {
+                    //         //     if(begin[index]<begin[i])
+                    //         //         index=i;
+                    //         // }
 
-                            cv::String modelTxt = "models/lenet.prototxt";
-                            cv::String modelBin = "models/lenet_iter_10000.caffemodel";
-                            cv::dnn::Net net;
-                            net = cv::dnn::readNetFromCaffe(modelTxt, modelBin);
-                            cv::Mat inputBlob = cv::dnn::blobFromImage(crop_pattern,1.0f,cv::Size(28,28),128);
-                            net.setInput(inputBlob, "data");
-                            std::vector<float> prob = std::vector<float>(net.forward("prob"));
-                            auto predno = max_element(prob.begin(), prob.end());
-                            std::cout<<"I guess the pattern is " << predno - prob.begin()<< std::endl;
-                            op::opLog("over! ", op::Priority::High);
-                            // std::cout<<""<<std::endl;
-                            stick_point.clear();
-                    }
+                    //         cv::String modelTxt = "models/lenet.prototxt";
+                    //         cv::String modelBin = "models/lenet_iter_10000.caffemodel";
+                    //         cv::dnn::Net net;
+                    //         net = cv::dnn::readNetFromCaffe(modelTxt, modelBin);
+                    //         cv::Mat inputBlob = cv::dnn::blobFromImage(crop_pattern,1.0f,cv::Size(28,28),128);
+                    //         net.setInput(inputBlob, "data");
+                    //         std::vector<float> prob = std::vector<float>(net.forward("prob"));
+                    //         auto predno = max_element(prob.begin(), prob.end());
+                    //         std::cout<<"I guess the pattern is " << predno - prob.begin()<< std::endl;
+                    //         op::opLog("over! ", op::Priority::High);
+                    //         // std::cout<<""<<std::endl;
+                    //         stick_point.clear();
+                    // }
                     
-                        }
+                    //     }
 
-                        else if(fin_state == 0 && stick_point.size() < EXCLUTION)
-                    {
-                        stick_point.clear();
-                    }
-                        else{
-                            stick_point.push_back(stick_end);
-                        }
-                        // stick_point.push_back(stick_end);
+                    //     else if(fin_state == 0 && stick_point.size() < EXCLUTION)
+                    // {
+                    //     stick_point.clear();
+                    // }
+                    //     else{
+                    //         stick_point.push_back(stick_end);
+                    //     }
+                    //     // stick_point.push_back(stick_end);
 
 
-                        cv::Point current_stick_end(stick_end[0],stick_end[1]);
-                        cv::circle(cvOutputData, current_stick_end, 5, cv::Scalar(0, 0, 255), -1);
-                        for (int i = 1; i<stick_point.size(); ++i )
-                        {
-                            cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
-                            cv::Point b(stick_point[i][0],stick_point[i][1]);
-                            cv::line(cvOutputData, a, b, cv::Scalar(0, 255, 0), 10);
-                        }
+                    //     cv::Point current_stick_end(stick_end[0],stick_end[1]);
+                    //     cv::circle(cvOutputData, current_stick_end, 5, cv::Scalar(0, 0, 255), -1);
+                    //     for (int i = 1; i<stick_point.size(); ++i )
+                    //     {
+                    //         cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
+                    //         cv::Point b(stick_point[i][0],stick_point[i][1]);
+                    //         cv::line(cvOutputData, a, b, cv::Scalar(0, 255, 0), 10);
+                    //     }
 
                         // cv::bitwise_not(cvOutputData, cvOutputData);
                     }
