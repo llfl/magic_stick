@@ -56,9 +56,10 @@ public:
                         double RWristx = poseKeypoints[{person, 4, 0}];
                         double RWristy = poseKeypoints[{person, 4, 1}];
                         double stick_lenght = 0.0;
+                        int stick_scale = 1;
                         cv::circle(cvOutputData, cv::Point((int)(RWristx + stick_scale * (RWristx - RElbowx)),
                             (int)(RWristy + stick_scale * (RWristy - RElbowy))), 5, cv::Scalar(0, 0, 255), -1);
-                        // int stick_scale = 1;
+                        
                         // // for(int stick_scale = 2;true;stick_scale++){
                         //     cv::Rect area(int(RWristx), int(RWristy) , 
                         //     (int)(RWristx + stick_scale * (RWristx - RElbowx)),
