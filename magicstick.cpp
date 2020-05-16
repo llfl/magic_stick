@@ -56,26 +56,26 @@ public:
                         double RWristx = poseKeypoints[{person, 4, 0}];
                         double RWristy = poseKeypoints[{person, 4, 1}];
                         double stick_lenght = 0.0;
-                        int stick_scale = 1;
+                        int stick_scale = 2;
                         cv::circle(cvOutputData, cv::Point((int)(RWristx + stick_scale * (RWristx - RElbowx)),
                             (int)(RWristy + stick_scale * (RWristy - RElbowy))), 5, cv::Scalar(0, 0, 255), -1);
                         
-                        // // for(int stick_scale = 2;true;stick_scale++){
-                        //     cv::Rect area(int(RWristx), int(RWristy) , 
-                        //     (int)(RWristx + stick_scale * (RWristx - RElbowx)),
-                        //     (int)(RWristy + stick_scale * (RWristy - RElbowy)));
+                        // for(int stick_scale = 2;true;stick_scale++){
+                            cv::Rect area((int)(RWristx + stick_scale * (RWristx - RElbowx)),
+                                    (int)(RWristy + stick_scale * (RWristy - RElbowy)),
+                                    int(RWristx), int(RWristy));
                         
-                        //     cv::Mat crop_stick = cvOutputData(area);
-                        //     cv::cvtColor(crop_stick, crop_stick, cv::COLOR_RGB2GRAY);
-                        //     cv::Canny(crop_stick, crop_stick, 80, 180, 3, false);
-                        //     cv::threshold(crop_stick, crop_stick, 170, 255, cv::THRESH_BINARY);
-                        //     vector<cv::Vec2f> lines;
-                        //     cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 150, 0, 0);
-                        //     for( size_t i = 0; i < lines.size(); i++ )
-                        //     {
-                        //         cv::line( cvOutputData, cv::Point(lines[i][0], lines[i][1]),
-                        //         cv::Point( lines[i][2], lines[i][3]), cv::Scalar(0,0,255), 3, 8 );
-                        //     }
+                            cv::Mat crop_stick = cvOutputData(area);
+                            cv::cvtColor(crop_stick, crop_stick, cv::COLOR_RGB2GRAY);
+                            cv::Canny(crop_stick, crop_stick, 80, 180, 3, false);
+                            cv::threshold(crop_stick, crop_stick, 170, 255, cv::THRESH_BINARY);
+                            vector<cv::Vec2f> lines;
+                            cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 150, 0, 0);
+                            for( size_t i = 0; i < lines.size(); i++ )
+                            {
+                                cv::line( cvOutputData, cv::Point(lines[i][0], lines[i][1]),
+                                cv::Point( lines[i][2], lines[i][3]), cv::Scalar(0,0,255), 3, 8 );
+                            }
 
 
 
