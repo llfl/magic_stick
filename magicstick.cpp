@@ -55,7 +55,7 @@ public:
                         double RElbowy = poseKeypoints[{person, 3, 1}];
                         double RWristx = poseKeypoints[{person, 4, 0}];
                         double RWristy = poseKeypoints[{person, 4, 1}];
-                        double stick_lenght = 0.0
+                        double stick_lenght = 0.0;
                         for(int stick_scale = 3;true;stick_scale++){
                             cv::Rect area(int(RWristx), int(RWristy) , 
                             (int)(RWristx + stick_scale * (RWristx - RElbowx)),
