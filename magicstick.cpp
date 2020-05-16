@@ -48,8 +48,9 @@ public:
                 for (auto& datumPtr : *datumsPtr)
                 {
                     cv::Mat cvOutputData = OP_OP2CVMAT(datumPtr->cvOutputData);
+                    const auto& poseKeypoints = datumPtr->poseKeypoints;
                     for (auto person = 0 ; person < poseKeypoints.getSize(0) ; person++){
-                        const auto& poseKeypoints = datumPtr->poseKeypoints;
+
                         double RElbowx = poseKeypoints[{person, 3, 0}];
                         double RElbowy = poseKeypoints[{person, 3, 1}];
                         double RWristx = poseKeypoints[{person, 4, 0}];
