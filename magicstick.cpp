@@ -66,7 +66,7 @@ public:
                             cv::Canny(crop_stick, crop_stick, 80, 180, 3, false);
                             cv::threshold(crop_stick, crop_stick, 170, 255, cv::THRESH_BINARY);
                             vector<cv::Vec2f> lines;
-                            cv::HoughLines(crop_stick, lines, 1, cv::CV_PI / 180, 150, 0, 0);
+                            cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 150, 0, 0);
                             for( size_t i = 0; i < lines.size(); i++ )
                             {
                                 cv::line( crop_stick, cv::Point(lines[i][0], lines[i][1]),
