@@ -5,4 +5,6 @@ RUN git clone https://github.com/llfl/magic_stick && cd magic_stick && mkdir bui
 
 RUN /openpose/magic_stick/models/getModels.sh
 
+WORKDIR /openpose/magic_stick
+
 CMD [ "/bin/bash" ]
