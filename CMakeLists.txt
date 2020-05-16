@@ -697,134 +697,134 @@ if (UNIX OR APPLE)
       set(Caffe_FOUND 1)
     endif (Caffe_INCLUDE_DIRS AND Caffe_LIBS AND NOT BUILD_CAFFE)
 
-    # Else build from scratch
-    if (BUILD_CAFFE)
+    # # Else build from scratch
+    # if (BUILD_CAFFE)
 
-      # Download Caffe
-      message(STATUS "Caffe will be downloaded from source now. NOTE: This process might take several minutes depending
-        on your internet connection.")
+    #   # Download Caffe
+    #   message(STATUS "Caffe will be downloaded from source now. NOTE: This process might take several minutes depending
+    #     on your internet connection.")
 
-      # Check if pulled
-      file(GLOB CAFFE_DIR_VALID ${CMAKE_SOURCE_DIR}/3rdparty/caffe/*)
-      list(LENGTH CAFFE_DIR_VALID CAFFE_DIR_VALID_LENGTH)
-      if (CAFFE_DIR_VALID_LENGTH EQUAL 0)
-        execute_process(COMMAND git submodule update --init ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
-        # execute_process(COMMAND git submodule update --init --recursive --remote) # This would initialize them all
-      else (CAFFE_DIR_VALID_LENGTH EQUAL 0)
-        message(STATUS "Caffe has already been downloaded.")
-      endif (CAFFE_DIR_VALID_LENGTH EQUAL 0)
+    #   # Check if pulled
+    #   file(GLOB CAFFE_DIR_VALID ${CMAKE_SOURCE_DIR}/3rdparty/caffe/*)
+    #   list(LENGTH CAFFE_DIR_VALID CAFFE_DIR_VALID_LENGTH)
+    #   if (CAFFE_DIR_VALID_LENGTH EQUAL 0)
+    #     execute_process(COMMAND git submodule update --init ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
+    #     # execute_process(COMMAND git submodule update --init --recursive --remote) # This would initialize them all
+    #   else (CAFFE_DIR_VALID_LENGTH EQUAL 0)
+    #     message(STATUS "Caffe has already been downloaded.")
+    #   endif (CAFFE_DIR_VALID_LENGTH EQUAL 0)
 
-      # Build Process
-      set(CAFFE_CPU_ONLY OFF)
-      if (${GPU_MODE} MATCHES "CUDA")
-        # execute_process(COMMAND git checkout master WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
-        execute_process(COMMAND git checkout c95002f WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
-      elseif (${GPU_MODE} MATCHES "CPU_ONLY")
-        if (USE_MKL)
-          #execute_process(COMMAND git checkout intel WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
-          execute_process(COMMAND git checkout b6712ce WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
-          execute_process(COMMAND sh prepare_mkl.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe/external/mkl
-              OUTPUT_VARIABLE rv)
-          set( MLIST ${rv} )
-          separate_arguments(MLIST)
-          list(GET MLIST 0 MKL_PATH)
-          message(STATUS ${MKL_PATH})
-          file(GLOB MKL_SO
-            "${MKL_PATH}lib/*"
-            )
-          file(COPY ${MKL_SO} DESTINATION ${CMAKE_BINARY_DIR}/caffe)
+    #   # Build Process
+    #   set(CAFFE_CPU_ONLY OFF)
+    #   if (${GPU_MODE} MATCHES "CUDA")
+    #     # execute_process(COMMAND git checkout master WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
+    #     execute_process(COMMAND git checkout c95002f WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
+    #   elseif (${GPU_MODE} MATCHES "CPU_ONLY")
+    #     if (USE_MKL)
+    #       #execute_process(COMMAND git checkout intel WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
+    #       execute_process(COMMAND git checkout b6712ce WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
+    #       execute_process(COMMAND sh prepare_mkl.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe/external/mkl
+    #           OUTPUT_VARIABLE rv)
+    #       set( MLIST ${rv} )
+    #       separate_arguments(MLIST)
+    #       list(GET MLIST 0 MKL_PATH)
+    #       message(STATUS ${MKL_PATH})
+    #       file(GLOB MKL_SO
+    #         "${MKL_PATH}lib/*"
+    #         )
+    #       file(COPY ${MKL_SO} DESTINATION ${CMAKE_BINARY_DIR}/caffe)
 
-          # New MLSL Lib
-          #execute_process(COMMAND sh prepare_mlsl.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe/external/mlsl
-          #    OUTPUT_VARIABLE rv)
-          #set( MLIST ${rv} )
-          #separate_arguments(MLIST)
-          #list(GET MLIST 0 MLSL_PATH)
-          #message(STATUS ${MLSL_PATH})
-          #file(GLOB MLSL_SO
-          #  "${MLSL_PATH}/intel64/lib/*"
-          #  )
-          #file(COPY ${MLSL_SO} DESTINATION ${CMAKE_BINARY_DIR}/caffe)
+    #       # New MLSL Lib
+    #       #execute_process(COMMAND sh prepare_mlsl.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe/external/mlsl
+    #       #    OUTPUT_VARIABLE rv)
+    #       #set( MLIST ${rv} )
+    #       #separate_arguments(MLIST)
+    #       #list(GET MLIST 0 MLSL_PATH)
+    #       #message(STATUS ${MLSL_PATH})
+    #       #file(GLOB MLSL_SO
+    #       #  "${MLSL_PATH}/intel64/lib/*"
+    #       #  )
+    #       #file(COPY ${MLSL_SO} DESTINATION ${CMAKE_BINARY_DIR}/caffe)
 
-          set(MKL_LIBS
-            #"${CMAKE_BINARY_DIR}/caffe/libmlsl.so"
-            "${CMAKE_BINARY_DIR}/caffe/libiomp5.so"
-            "${CMAKE_BINARY_DIR}/caffe/libmklml_intel.so"
-            "${CMAKE_BINARY_DIR}/caffe/lib/libmkldnn.so"
-            )
-        else (USE_MKL)
-          # execute_process(COMMAND git checkout master WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
-          execute_process(COMMAND git checkout c95002f WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
-        endif (USE_MKL)
-        set(CAFFE_CPU_ONLY ON)
-        set(USE_CUDNN OFF)
-      elseif (${GPU_MODE} MATCHES "OPENCL")
-        execute_process(COMMAND git checkout fe2a1102 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
-        set(USE_CUDNN OFF)
-      endif (${GPU_MODE} MATCHES "CUDA")
+    #       set(MKL_LIBS
+    #         #"${CMAKE_BINARY_DIR}/caffe/libmlsl.so"
+    #         "${CMAKE_BINARY_DIR}/caffe/libiomp5.so"
+    #         "${CMAKE_BINARY_DIR}/caffe/libmklml_intel.so"
+    #         "${CMAKE_BINARY_DIR}/caffe/lib/libmkldnn.so"
+    #         )
+    #     else (USE_MKL)
+    #       # execute_process(COMMAND git checkout master WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
+    #       execute_process(COMMAND git checkout c95002f WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
+    #     endif (USE_MKL)
+    #     set(CAFFE_CPU_ONLY ON)
+    #     set(USE_CUDNN OFF)
+    #   elseif (${GPU_MODE} MATCHES "OPENCL")
+    #     execute_process(COMMAND git checkout fe2a1102 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
+    #     set(USE_CUDNN OFF)
+    #   endif (${GPU_MODE} MATCHES "CUDA")
 
-      # Build Caffe
-      message(STATUS "Caffe will be built from source now.")
-      find_package(Caffe)
-      include(ExternalProject)
-      set(CAFFE_PREFIX caffe)
-      set(CAFFE_URL ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
+    #   # Build Caffe
+    #   message(STATUS "Caffe will be built from source now.")
+    #   find_package(Caffe)
+    #   include(ExternalProject)
+    #   set(CAFFE_PREFIX caffe)
+    #   set(CAFFE_URL ${CMAKE_SOURCE_DIR}/3rdparty/caffe)
 
-      # One for Intel Branch and one for Master
-      if (USE_MKL)
-        ExternalProject_Add(openpose_lib
-          SOURCE_DIR ${CAFFE_URL}
-          PREFIX ${CAFFE_PREFIX}
-          CMAKE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-          -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-          -DMKLDNN_INSTALL_DIR:PATH=<INSTALL_DIR>
-          -DUSE_MKL2017_AS_DEFAULT_ENGINE=${CAFFE_CPU_ONLY}
-          -DUSE_CUDNN=${USE_CUDNN}
-          -DCUDA_ARCH_NAME=${CUDA_ARCH}
-          -DCUDA_ARCH_BIN=${CUDA_ARCH_BIN}
-          -DCUDA_ARCH_PTX=${CUDA_ARCH_PTX}
-          -DCPU_ONLY=${CAFFE_CPU_ONLY}
-          -DCMAKE_BUILD_TYPE=Release
-          -DBUILD_docs=OFF
-          -DBUILD_python=OFF
-          -DBUILD_python_layer=OFF
-          -DUSE_LEVELDB=OFF
-          -DUSE_LMDB=OFF
-          -DUSE_OPENCV=OFF)
-          # -DOpenCV_DIR=${OpenCV_DIR})
-      else (USE_MKL)
-        ExternalProject_Add(openpose_lib
-          SOURCE_DIR ${CAFFE_URL}
-          PREFIX ${CAFFE_PREFIX}
-          CMAKE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-          -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-          -DUSE_CUDNN=${USE_CUDNN}
-          -DCUDA_ARCH_NAME=${CUDA_ARCH}
-          -DCUDA_ARCH_BIN=${CUDA_ARCH_BIN}
-          -DCUDA_ARCH_PTX=${CUDA_ARCH_PTX}
-          -DCPU_ONLY=${CAFFE_CPU_ONLY}
-          -DCMAKE_BUILD_TYPE=Release
-          -DBUILD_docs=OFF
-          -DBUILD_python=OFF
-          -DBUILD_python_layer=OFF
-          -DUSE_LEVELDB=OFF
-          -DUSE_LMDB=OFF
-          -DUSE_OPENCV=OFF)
-          # -DOpenCV_DIR=${OpenCV_DIR})
-      endif (USE_MKL)
+    #   # One for Intel Branch and one for Master
+    #   if (USE_MKL)
+    #     ExternalProject_Add(openpose_lib
+    #       SOURCE_DIR ${CAFFE_URL}
+    #       PREFIX ${CAFFE_PREFIX}
+    #       CMAKE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+    #       -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+    #       -DMKLDNN_INSTALL_DIR:PATH=<INSTALL_DIR>
+    #       -DUSE_MKL2017_AS_DEFAULT_ENGINE=${CAFFE_CPU_ONLY}
+    #       -DUSE_CUDNN=${USE_CUDNN}
+    #       -DCUDA_ARCH_NAME=${CUDA_ARCH}
+    #       -DCUDA_ARCH_BIN=${CUDA_ARCH_BIN}
+    #       -DCUDA_ARCH_PTX=${CUDA_ARCH_PTX}
+    #       -DCPU_ONLY=${CAFFE_CPU_ONLY}
+    #       -DCMAKE_BUILD_TYPE=Release
+    #       -DBUILD_docs=OFF
+    #       -DBUILD_python=OFF
+    #       -DBUILD_python_layer=OFF
+    #       -DUSE_LEVELDB=OFF
+    #       -DUSE_LMDB=OFF
+    #       -DUSE_OPENCV=OFF)
+    #       # -DOpenCV_DIR=${OpenCV_DIR})
+    #   else (USE_MKL)
+    #     ExternalProject_Add(openpose_lib
+    #       SOURCE_DIR ${CAFFE_URL}
+    #       PREFIX ${CAFFE_PREFIX}
+    #       CMAKE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+    #       -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+    #       -DUSE_CUDNN=${USE_CUDNN}
+    #       -DCUDA_ARCH_NAME=${CUDA_ARCH}
+    #       -DCUDA_ARCH_BIN=${CUDA_ARCH_BIN}
+    #       -DCUDA_ARCH_PTX=${CUDA_ARCH_PTX}
+    #       -DCPU_ONLY=${CAFFE_CPU_ONLY}
+    #       -DCMAKE_BUILD_TYPE=Release
+    #       -DBUILD_docs=OFF
+    #       -DBUILD_python=OFF
+    #       -DBUILD_python_layer=OFF
+    #       -DUSE_LEVELDB=OFF
+    #       -DUSE_LMDB=OFF
+    #       -DUSE_OPENCV=OFF)
+    #       # -DOpenCV_DIR=${OpenCV_DIR})
+    #   endif (USE_MKL)
 
-      ExternalProject_Get_Property(openpose_lib install_dir)
+    #   ExternalProject_Get_Property(openpose_lib install_dir)
 
-      if (NOT Caffe_FOUND)
-        add_custom_command(TARGET openpose_lib
-            POST_BUILD
-            COMMAND ${CMAKE_COMMAND} ${CMAKE_SOURCE_DIR}
-            COMMAND $(MAKE)
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-            COMMENT "Rerunning cmake after building Caffe submodule")
-      endif (NOT Caffe_FOUND)
+    #   if (NOT Caffe_FOUND)
+    #     add_custom_command(TARGET openpose_lib
+    #         POST_BUILD
+    #         COMMAND ${CMAKE_COMMAND} ${CMAKE_SOURCE_DIR}
+    #         COMMAND $(MAKE)
+    #         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    #         COMMENT "Rerunning cmake after building Caffe submodule")
+    #   endif (NOT Caffe_FOUND)
 
-    endif (BUILD_CAFFE)
+    # endif (BUILD_CAFFE)
 
     if (NOT Caffe_FOUND AND NOT BUILD_CAFFE)
       message(FATAL_ERROR "Caffe not found. Either turn on the BUILD_CAFFE option or specify the path of Caffe includes
