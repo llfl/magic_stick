@@ -65,7 +65,7 @@ public:
                             cv::cvtColor(crop_stick, crop_stick, COLOR_RGB2GRAY);
                             cv::Canny(crop_stick, crop_stick, 80, 180, 3, false);
                             cv::threshold(crop_stick, crop_stick, 170, 255, THRESH_BINARY);
-                            vector<Vec2f> lines;
+                            vector<cv::Vec2f> lines;
                             cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 150, 0, 0);
                             for( size_t i = 0; i < lines.size(); i++ )
                             {
