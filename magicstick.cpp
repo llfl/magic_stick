@@ -69,8 +69,8 @@ public:
                             cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 150, 0, 0);
                             for( size_t i = 0; i < lines.size(); i++ )
                             {
-                                cv::line( crop_stick, Point(lines[i][0], lines[i][1]),
-                                cv::Point( lines[i][2], lines[i][3]), Scalar(0,0,255), 3, 8 );
+                                cv::line( crop_stick, cv::Point(lines[i][0], lines[i][1]),
+                                cv::Point( lines[i][2], lines[i][3]), cv::Scalar(0,0,255), 3, 8 );
                             }
                             cv::imshow( "Source", crop_stick );
                             cv::waitKey(0);
