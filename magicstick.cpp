@@ -13,16 +13,93 @@
 #include <cmath>
 
 using namespace std;
-#define STICK_RELATIVE_LENGTH 1
+#define STICK_RELATIVE_LENGTH 3
 #define DURATION 3
 #define EXCLUTION 20
-#define MIN_VELOCITY 20
+#define MIN_VELOCITY 100
 
-
+double eps = 0.01;
 int fin_state = 0;
 int pattern_no = 0;
+int fcount = 0;
 
 vector<vector<int> > stick_point;
+
+//kalman filter
+
+namespace kf {
+    class kalmanFilter{
+        public:
+            kalmanFilter(int x, int y):KF_(6,4){
+                measurement_ = cv::Mat::zeros(4,1,CV_32F);
+                KF_.transitionMatrix = (cv::Mat_<float>(6, 6) << 1, 0, (5./6.), 0, 0, 0,
+                                                             0, 1, 0, (5./6.), 0, 0,
+                                                             0, 0, 1, 0, 1, 0,
+                                                             0, 0, 0, 1, 0, 1,
+                                                             0, 0, 0, 0, 1, 0,
+                                                             0, 0, 0, 0, 0, 1);
+                setIdentity(KF_.measurementMatrix, cv::Scalar::all(1));
+                setIdentity(KF_.processNoiseCov, cv::Scalar::all(1e-10));//**10: Larger, slower regression
+                setIdentity(KF_.measurementNoiseCov, cv::Scalar::all(1));//1: Larger, quicker regression
+                setIdentity(KF_.errorCovPost, cv::Scalar::all(1));
+ 
+                KF_.statePost = (cv::Mat_<float>(6, 1) << x, y, 0, 0, 0, 0);
+            }
+
+            cv::Point2f run(float x1, float y1,float x2, float y2){
+                cv::Mat prediction = KF_.predict();
+                cv::Point2f predict_pt = cv::Point2f(prediction.at<float>(0),prediction.at<float>(1));
+
+                measurement_.at<float>(0, 0) = x1;
+                measurement_.at<float>(1, 0) = y1;
+                measurement_.at<float>(2, 0) = x2;
+                measurement_.at<float>(3, 0) = y2;
+
+                KF_.correct(measurement_);
+
+                return predict_pt;
+            }
+
+        private:
+            cv::Mat measurement_;
+            cv::KalmanFilter KF_;
+    };
+
+    class kalmanFilterW{
+        public:
+            kalmanFilterW(int x, int y):KF_(4,2){
+                measurement_ = cv::Mat::zeros(2,1,CV_32F);
+                KF_.transitionMatrix = (cv::Mat_<float>(4, 4) <<1, 0, 200, 0,
+                                                                0, 1, 0, 200,
+                                                                0, 0, 1, 0,
+                                                                0, 0, 0, 1);
+                setIdentity(KF_.measurementMatrix, cv::Scalar::all(1));
+                setIdentity(KF_.processNoiseCov, cv::Scalar::all(1e-10));//**10: Larger, slower regression
+                setIdentity(KF_.measurementNoiseCov, cv::Scalar::all(10));//1: Larger, quicker regression
+                setIdentity(KF_.errorCovPost, cv::Scalar::all(10));
+ 
+                KF_.statePost = (cv::Mat_<float>(4, 1) << x, y, 0, 0);
+            }
+
+            cv::Point2f run(float x, float y){
+                cv::Mat prediction = KF_.predict();
+                cv::Point2f predict_pt = cv::Point2f(prediction.at<float>(0),prediction.at<float>(1));
+
+                measurement_.at<float>(0, 0) = x;
+                measurement_.at<float>(1, 0) = y;
+
+                KF_.correct(measurement_);
+
+                return predict_pt;
+            }
+
+        private:
+            cv::Mat measurement_;
+            cv::KalmanFilter KF_;
+    };
+}
+
+kf::kalmanFilterW kalman(0,0);
 
 // This worker will just invert the image
 class WUserPostProcessing : public op::Worker<std::shared_ptr<std::vector<std::shared_ptr<op::Datum>>>>
@@ -55,32 +132,192 @@ public:
                         double RElbowy = poseKeypoints[{person, 3, 1}];
                         double RWristx = poseKeypoints[{person, 4, 0}];
                         double RWristy = poseKeypoints[{person, 4, 1}];
-                        double stick_lenght = 0.0;
-                        int stick_scale = 2;
-                        cv::circle(cvOutputData, cv::Point((int)(RWristx + stick_scale * (RWristx - RElbowx)),
-                            (int)(RWristy + stick_scale * (RWristy - RElbowy))), 5, cv::Scalar(0, 0, 255), -1);
-                        
-                        // for(int stick_scale = 2;true;stick_scale++){
-                            cv::Rect area((int)(RWristx + stick_scale * (RWristx - RElbowx)),
-                                    (int)(RWristy + stick_scale * (RWristy - RElbowy)),
-                                    int(RWristx), int(RWristy));
-                        
-                            cv::Mat crop_stick = cvOutputData(area);
+                        if(RElbowx<eps || RElbowy < eps || RWristx < eps || RWristy < eps){
+                            continue;
+                        }
+                            
+                        // double stick_scale = 2.5;
+                        // cv::circle(cvOutputData, cv::Point(
+                        //     (int)(RWristx + stick_scale * (RWristx - RElbowx)),
+                        //     (int)(RWristy + stick_scale * (RWristy - RElbowy))), 
+                        //     5, cv::Scalar(0, 0, 255), -1);
+                        double y_offset,x_offset;
+                        // double stick_scale = 2;
+                        vector<cv::Vec4f> lines;
+                        cv::Mat crop_stick_o;
+                        cv::Mat crop_stick;
+                        cv::Rect area;
+                        // do {
+                            // stick_scale += 1;
+                            y_offset = STICK_RELATIVE_LENGTH * (RWristy - RElbowy);
+                            x_offset = STICK_RELATIVE_LENGTH * (RWristx - RElbowx);
+                            if(RWristy + y_offset < 0 ) y_offset = 1 - RWristy;
+                            if(RWristy + y_offset > cvOutputData.rows ) y_offset = cvOutputData.rows - RWristy - 1;
+                            if(RWristx + x_offset < 0 ) x_offset = 1 - RWristx;
+                            if(RWristx + x_offset > cvOutputData.cols ) x_offset = cvOutputData.cols - RWristx - 1;
+
+
+                            if (x_offset > 0){
+                                if(y_offset >0){
+                                    area = cv::Rect(int(RWristx), int(RWristy),
+                                    abs(int(x_offset)),
+                                    abs(int(y_offset)));
+                                }else{
+                                    area = cv::Rect(int(RWristx), int(RWristy + y_offset),
+                                    abs(int(x_offset)),
+                                    abs(int(y_offset)));
+                                }
+                            }else{
+                                if(y_offset >0){
+                                    area = cv::Rect(int(RWristx + x_offset), int(RWristy),
+                                    abs(int(x_offset)),
+                                    abs(int(y_offset)));
+                                }else{
+                                    area = cv::Rect(int(RWristx + x_offset), int(RWristy + y_offset),
+                                    abs(int(x_offset)),
+                                    abs(int(y_offset)));
+                                }
+                            }
+                            cv::circle(cvOutputData, cv::Point(
+                            (int)(RWristx + x_offset),
+                            (int)(RWristy + y_offset)), 
+                            5, cv::Scalar(0, 0, 255), -1);
+
+                            crop_stick_o = cvOutputData(area);
+                            if(crop_stick_o.empty()){
+                                break;
+                            }
+
+                            crop_stick_o.copyTo(crop_stick);
+                            
+
                             cv::cvtColor(crop_stick, crop_stick, cv::COLOR_RGB2GRAY);
                             cv::Canny(crop_stick, crop_stick, 80, 180, 3, false);
                             cv::threshold(crop_stick, crop_stick, 170, 255, cv::THRESH_BINARY);
-                            vector<cv::Vec2f> lines;
-                            cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 150, 0, 0);
-                            for( size_t i = 0; i < lines.size(); i++ )
-                            {
-                                cv::line( cvOutputData, cv::Point(lines[i][0], lines[i][1]),
-                                cv::Point( lines[i][2], lines[i][3]), cv::Scalar(0,0,255), 3, 8 );
+                            
+                            
+                            // cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 50, 0, 0);
+                            cv::HoughLinesP( crop_stick, lines, 1, CV_PI/180, 30, 30, 10 );
+
+                        // }while(lines.size()<1 && stick_scale < 4);
+                        vector<int>stick_pointy(2);
+                        cv::Point2f kalman_stick;
+                        if(lines.size()>0){
+                            vector<int>stick_end(2);
+                            if(x_offset >0 ){
+                                // cv::circle(crop_stick_o, cv::Point( lines[0][2], lines[0][3]), 5, cv::Scalar(255, 0, 0), -1);
+
+                                stick_end[0] = lines[0][2];
+                                stick_end[1] = lines[0][3];
+                            }else{
+                                // cv::circle(crop_stick_o, cv::Point( lines[0][0], lines[0][1]), 5, cv::Scalar(255, 0, 0), -1);
+                                stick_end[0] = lines[0][0];
+                                stick_end[1] = lines[0][1];
                             }
+                            stick_end[0] += area.x;
+                            stick_end[1] += area.y;
+                            cv::circle(cvOutputData, cv::Point(stick_end[0],stick_end[1]),
+                                                         5, cv::Scalar(0, 255, 0), -1);
+                            kalman_stick = kalman.run(float(stick_end[0]),
+                                                    float(stick_end[1]));
+                            if(pow(kalman_stick.x - stick_end[0],2) + pow(kalman_stick.y - stick_end[1],2) <= MIN_VELOCITY){
+                                if(stick_point.size() >= EXCLUTION){
 
 
+                                    cv::Mat stick_pattern(cvOutputData.cols, cvOutputData.rows, CV_8UC1, 255);
+                                    int minx, maxx, miny, maxy;
+                                    minx = stick_point[0][0];
+                                    maxx = stick_point[0][0];
+                                    miny = stick_point[0][1];
+                                    maxy = stick_point[0][1];
 
+                                    for (int i = 1; i<stick_point.size(); ++i ){
+                                
+                                        if(minx>stick_point[i][0])minx = stick_point[i][0];
+                                        if(maxx<stick_point[i][0])maxx = stick_point[i][0];
+                                        if(miny>stick_point[i][1])miny = stick_point[i][1];
+                                        if(maxy<stick_point[i][1])maxy = stick_point[i][1];
 
+                                        cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
+                                        cv::Point b(stick_point[i][0],stick_point[i][1]);
+                                        cv::line(stick_pattern, a, b, 0, 10);
+                                    }
+                                    if(minx<0) minx=0;
+                                    if(miny<0) miny=0;
+                                    if(maxy>cvOutputData.rows)maxy=cvOutputData.rows;
+                                    if(maxx>cvOutputData.cols)maxx=cvOutputData.cols;
+                                    int long_side = maxx-minx;
+                                    if(long_side < maxy-miny) long_side = maxy - miny;
+
+                                    cv::Rect area(minx, miny , long_side,long_side);
+
+                                    cv::Mat crop_pattern = stick_pattern(area);
+                                    cv::Mat resize_pattern(28, 28, CV_8UC1);
+                                    cv::resize(crop_pattern, resize_pattern, cv::Size(28,28));
+                                    cv::Mat flip_pattern;
+                                    cv::flip(resize_pattern,flip_pattern, 1);
+                                    cv::Mat float_pattern;
+                                    flip_pattern.convertTo(float_pattern, CV_32FC1);
+                                    pattern_no ++;
+                                    cv::imwrite(std::to_string(pattern_no)+"hello2.jpg", flip_pattern);
+
+                            
+
+                                    cv::String modelTxt = "models/lenet.prototxt";
+                                    cv::String modelBin = "models/lenet_iter_10000.caffemodel";
+                                    cv::dnn::Net net;
+                                    net = cv::dnn::readNetFromCaffe(modelTxt, modelBin);
+                                    cv::Mat inputBlob = cv::dnn::blobFromImage(crop_pattern,1.0f,cv::Size(28,28),128);
+                                    net.setInput(inputBlob, "data");
+                                    std::vector<float> prob = std::vector<float>(net.forward("prob"));
+                                    auto predno = max_element(prob.begin(), prob.end());
+                                    std::cout<<"I guess the pattern is " << predno - prob.begin()<< std::endl;
+                                    op::opLog("over! ", op::Priority::High);
+                                    stick_point.clear();
+                                }else{
+                                    stick_point.clear();
+                                }
+                            }
+                            // if(stick_point.size() == 0){
+                            //     stick_point.push_back(stick_end);
+                            // }
+                            // vector<int>stick_last = stick_point.back();
+                            // if(pow(stick_last[0] - stick_end[0],2) + pow(stick_last[1] - stick_end[1],2) <= MIN_VELOCITY){
+                            //     fin_state = (fin_state + 1) % DURATION;
+                            //     if (fin_state == 0 && stick_point.size() >= EXCLUTION){
+                            //         for (int i = 1; i<stick_point.size(); ++i ){
+                            //             cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
+                            //             cv::Point b(stick_point[i][0],stick_point[i][1]);
+                            //             cv::line(cvOutputData, a, b, 0, 10);
+                            //         }
+                            //     }
+                            // }else{
+                            //     stick_point.push_back(stick_end);
+                            // }
+                        }else{
+                            double s = 5./6.;
+                            kalman_stick = kalman.run(s*(RWristx + x_offset),
+                                                    s*(RWristy + y_offset));
+                        }
+                        stick_pointy[0] = int(kalman_stick.x);
+                        stick_pointy[1] = int(kalman_stick.y);
+                        stick_point.push_back(stick_pointy);
+                        // for (int i = 1; i<stick_point.size(); ++i ){
+                        //                 cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
+                        //                 cv::Point b(stick_point[i][0],stick_point[i][1]);
+                        //                 cv::line(cvOutputData, a, b, 0, 5);
+                        //     }
+                        cv::circle(cvOutputData, kalman_stick, 5, cv::Scalar(255, 0, 0), -1);
+                        cv::imwrite("./build/a"+std::to_string(fcount)+"hello.jpg", cvOutputData);
+                        //  if(!crop_stick_o.empty()){
+                        //     cv::imwrite("./build/b"+std::to_string(fcount)+"hello.jpg", crop_stick_o);
                         // }
+                         
+                         fcount ++;
+
+                    
+
+
                         
                     //     vector<int>stick_end(2);
                     //     stick_end[0] = (int)(RWristx + STICK_RELATIVE_LENGTH * (RWristx - RElbowx));
