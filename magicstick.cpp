@@ -14,15 +14,17 @@
 
 using namespace std;
 #define STICK_RELATIVE_LENGTH 3
-#define DURATION 3
+#define DURATION 30
 #define EXCLUTION 20
-#define MIN_VELOCITY 100
+#define MIN_VELOCITY 20
+#define PERSON_NUM 5
 
-double eps = 0.01;
+double eps = 0.005;
 
 int stallState = 0;
 
 int poseState = -1;
+
 
 vector<cv::Vec2f > stick_point;
 
@@ -70,8 +72,8 @@ namespace kf {
         public:
             kalmanFilterW(int x, int y):KF_(4,2){
                 measurement_ = cv::Mat::zeros(2,1,CV_32F);
-                KF_.transitionMatrix = (cv::Mat_<float>(4, 4) <<1, 0, 200, 0,
-                                                                0, 1, 0, 200,
+                KF_.transitionMatrix = (cv::Mat_<float>(4, 4) <<1, 0, 1000, 0,
+                                                                0, 1, 0, 1000,
                                                                 0, 0, 1, 0,
                                                                 0, 0, 0, 1);
                 setIdentity(KF_.measurementMatrix, cv::Scalar::all(1));
@@ -100,7 +102,8 @@ namespace kf {
     };
 }
 
-kf::kalmanFilterW kalman(0,0);
+kf::kalmanFilterW kalmanr(0,0);
+
 
 // This worker will just invert the image
 class WUserPostProcessing : public op::Worker<std::shared_ptr<std::vector<std::shared_ptr<op::Datum>>>>
@@ -134,256 +137,60 @@ public:
                             stick_point.clear();
                             continue;
                         }
-                        cv::Point2f stick_end = cv::Point2f(RWristx, RWristy);
-                        double gradientK = (RWristy - RElbowy)/(RWristx - RElbowx);
-
+                        cv::Point2f stick_end_or = cv::Point2f(RWristx, RWristy);
+                        double M = RWristx - RElbowx;
+                        if(M<eps)M=eps;
+                        double gradientK = (RWristy - RElbowy)/M;
+                        cv::Point2f stick_end = kalmanr.run(stick_end_or.x,stick_end_or.y);
+                        // cv::Point2f stick_end = stick_end_or;
+                        // cv::circle(cvOutputData, stick_end, 5, cv::Scalar(0, 255, 0), -1);
                         if(stick_point.size() == 0){
                             stick_point.push_back(stick_end);
                             continue;
                         }
+                        // for (int i = 1; i<stick_point.size(); ++i ){
+                        //     cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
+                        //     cv::Point b(stick_point[i][0],stick_point[i][1]);
+                        //     cv::line(cvOutputData, a, b, cv::Scalar(255, 0, 0), 5);
+                        // }
                         cv::Point2f stick_last = stick_point.back();
-                        double gradientG = (stick_end.y - stick_last.y)/(stick_end.x - stick_last.x);
-                        switch(poseState){
-                            case 1:
-                                    if(gradientG < -0.5 && gradientG >= -2 && stick_end.x < stick_last.x){
-                                        poseState = 2;
-                                    }else if( (gradientG < -2 || gradientG > 2) && stick_end.y > stick_last.y){
-                                        poseState = 31;
-                                    }else if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x < stick_last.x){
-                                        poseState = 32;
-                                    }else{
-                                        poseState = 4;
-                                    }
-                                    break;
-                            case 2:
-                                    if(gradientG < -0.5 && gradientG >= -2 && stick_end.x < stick_last.x){
-                                        poseState = 2;
-                                    }else if(gradientG > 0 && stick_end.x < stick_last.x){
-                                        poseState = 20;
-                                    }else{
-                                        poseState = -1;
-                                    }
-                                    break;
-                            case 20:
-                                    if(gradientG > 0 && stick_end.x < stick_last.x){
-                                        poseState = 20;
-                                    }else if(gradientG < -0.5 && stick_end.x < stick_last.x){
-                                        poseState = 200;
-                                    } else{
-                                        poseState = -1;
-                                    }
-                                    break;
-                            case 200:
-                                    if(gradientG < -0.5 && stick_end.x < stick_last.x){
-                                        poseState = 200;
-                                    }else if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
-                                        stallState = (stallState + 1) % DURATION;
-                                        if(stallState == 0  && gradientK > 0 && RWristx < RElbowx){
-                                            std::cout<<"On detection : W " << std::endl;
-                                            poseState = -1;
-                                        }
-                                    }else{
-                                        poseState = -1;
-                                        stallState = 0;
-                                    }
-                                    break;
-
-                            case 31:
-                                    if((gradientG < -2 || gradientG > 2) && stick_end.y > stick_last.y){
-                                        poseState = 31;
-                                    }else if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x < stick_last.x){
-                                        poseState = 310;
-                                    }else{
-                                        poseState = -1;
-                                    }
-                                    break;
-                            case 310:
-                                    if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x < stick_last.x){
-                                        poseState = 310;
-                                    }else if((gradientG < -2 || gradientG > 2) && stick_end.y < stick_last.y){
-                                        poseState = 3100;
-                                    }else{
-                                        poseState = -1;
-                                    }
-                                    break;
-
-                            case 3100:
-                                    if((gradientG < -2 || gradientG > 2) && stick_end.y < stick_last.y){
-                                        poseState = 3100;
-                                    }else if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
-                                        stallState = (stallState + 1) % DURATION;
-                                        if(stallState == 0  && gradientK > 0 && RWristx < RElbowx){
-                                            std::cout<<"On detection : 口 " << std::endl;
-                                            poseState = -1;
-                                        }
-                                    }else{
-                                        poseState = -1;
-                                        stallState = 0;
-                                    }
-                                    break;
-
-                            case 32:
-                                    if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x < stick_last.x){
-                                        poseState = 32;
-                                    }else if((gradientG < -2 || gradientG > 2) && stick_end.y > stick_last.y){
-                                        poseState = 320;
-                                    }else{
-                                        poseState = -1;
-                                    }
-                                    break;
-                            case 320:
-                                    if((gradientG < -2 || gradientG > 2) && stick_end.y > stick_last.y){
-                                        poseState = 320;
-                                    }else if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x > stick_last.x){
-                                        poseState = 3200;
-                                    }else{
-                                        poseState = -1;
-                                    }
-                                    break;
-                            case 3200:
-                                    if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x > stick_last.x){
-                                        poseState = 3200;
-                                    }else if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
-                                        stallState = (stallState + 1) % DURATION;
-                                        if(stallState == 0  && gradientK > 0 && RWristx < RElbowx){
-                                            std::cout<<"On detection : 口 " << std::endl;
-                                            poseState = -1;
-                                        }
-                                    }else{
-                                        poseState = -1;
-                                        stallState = 0;
-                                    }
-                                    break;
-                            case 4:
-                                    if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
-                                        stallState = (stallState + 1) % DURATION;
-                                        if(stallState == 0  && gradientK > 0 && RWristx < RElbowx){
-                                            std::cout<<"On detection : O " << std::endl;
-                                            poseState = -1;
-                                        }
-                                    }else{
-                                        poseState = 4;
-                                    }
-                                    break;
-
-                            default:
-                                    if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
-                                        stallState = (stallState + 1) % DURATION;
-                                        if(stallState == 0 && poseState == -1 && gradientK < 0 && RWristx > RElbowx){
-                                            poseState = 1;
-                                        }
-                                    }else{
-                                            poseState = -1;
-                                    }
+                        if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) > 100*eps){
+                            stick_point.push_back(stick_end);
                         }
                         
-
-
-
-                        // double y_offset,x_offset;
-                        // // double stick_scale = 2;
-                        // vector<cv::Vec4f> lines;
-                        // cv::Mat crop_stick_o;
-                        // cv::Mat crop_stick;
-                        // cv::Rect area;
-                        // // do {
-                        //     // stick_scale += 1;
-                        //     y_offset = STICK_RELATIVE_LENGTH * (RWristy - RElbowy);
-                        //     x_offset = STICK_RELATIVE_LENGTH * (RWristx - RElbowx);
-                        //     if(RWristy + y_offset < 0 ) y_offset = 1 - RWristy;
-                        //     if(RWristy + y_offset > cvOutputData.rows ) y_offset = cvOutputData.rows - RWristy - 1;
-                        //     if(RWristx + x_offset < 0 ) x_offset = 1 - RWristx;
-                        //     if(RWristx + x_offset > cvOutputData.cols ) x_offset = cvOutputData.cols - RWristx - 1;
-
-
-                        //     if (x_offset > 0){
-                        //         if(y_offset >0){
-                        //             area = cv::Rect(int(RWristx), int(RWristy),
-                        //             abs(int(x_offset)),
-                        //             abs(int(y_offset)));
-                        //         }else{
-                        //             area = cv::Rect(int(RWristx), int(RWristy + y_offset),
-                        //             abs(int(x_offset)),
-                        //             abs(int(y_offset)));
-                        //         }
-                        //     }else{
-                        //         if(y_offset >0){
-                        //             area = cv::Rect(int(RWristx + x_offset), int(RWristy),
-                        //             abs(int(x_offset)),
-                        //             abs(int(y_offset)));
-                        //         }else{
-                        //             area = cv::Rect(int(RWristx + x_offset), int(RWristy + y_offset),
-                        //             abs(int(x_offset)),
-                        //             abs(int(y_offset)));
-                        //         }
-                        //     }
-                        //     cv::circle(cvOutputData, cv::Point(
-                        //     (int)(RWristx + x_offset),
-                        //     (int)(RWristy + y_offset)), 
-                        //     5, cv::Scalar(0, 0, 255), -1);
-
-                        //     crop_stick_o = cvOutputData(area);
-                        //     if(crop_stick_o.empty()){
-                        //         break;
-                        //     }
-
-                        //     crop_stick_o.copyTo(crop_stick);
-                            
-
-                        //     cv::cvtColor(crop_stick, crop_stick, cv::COLOR_RGB2GRAY);
-                        //     cv::Canny(crop_stick, crop_stick, 80, 180, 3, false);
-                        //     cv::threshold(crop_stick, crop_stick, 170, 255, cv::THRESH_BINARY);
-                            
-                            
-                        //     // cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 50, 0, 0);
-                        //     cv::HoughLinesP( crop_stick, lines, 1, CV_PI/180, 30, 30, 10 );
-
-                        // // }while(lines.size()<1 && stick_scale < 4);
-                        // vector<int>stick_pointy(2);
-                        // cv::Point2f kalman_stick;
-                        // if(lines.size()>0){
-                        //     vector<int>stick_end(2);
-                        //     if(x_offset >0 ){
-                        //         // cv::circle(crop_stick_o, cv::Point( lines[0][2], lines[0][3]), 5, cv::Scalar(255, 0, 0), -1);
-
-                        //         stick_end[0] = lines[0][2];
-                        //         stick_end[1] = lines[0][3];
-                        //     }else{
-                        //         // cv::circle(crop_stick_o, cv::Point( lines[0][0], lines[0][1]), 5, cv::Scalar(255, 0, 0), -1);
-                        //         stick_end[0] = lines[0][0];
-                        //         stick_end[1] = lines[0][1];
-                        //     }
-                        //     stick_end[0] += area.x;
-                        //     stick_end[1] += area.y;
-                        //     cv::circle(cvOutputData, cv::Point(stick_end[0],stick_end[1]),
-                        //                                  5, cv::Scalar(0, 255, 0), -1);
-                        //     kalman_stick = kalman.run(float(stick_end[0]),
-                        //                             float(stick_end[1]));
-                        //     if(pow(kalman_stick.x - stick_end[0],2) + pow(kalman_stick.y - stick_end[1],2) <= MIN_VELOCITY){
-                        //         if(stick_point.size() >= EXCLUTION){
-
-                        //             stick_point.clear();
-                        //         }else{
-                        //             stick_point.clear();
-                        //         }
-                        //     }
-                        // }else{
-                        //     double s = 5./6.;
-                        //     kalman_stick = kalman.run(s*(RWristx + x_offset),
-                        //                             s*(RWristy + y_offset));
-                        // }
-                        // stick_pointy[0] = int(kalman_stick.x);
-                        // stick_pointy[1] = int(kalman_stick.y);
-                        // stick_point.push_back(stick_pointy);
                         
-
-                        // cv::circle(cvOutputData, kalman_stick, 5, cv::Scalar(255, 0, 0), -1);
-                        // cv::imwrite("./build/a"+std::to_string(fcount)+"hello.jpg", cvOutputData);
-                        // //  if(!crop_stick_o.empty()){
-                        // //     cv::imwrite("./build/b"+std::to_string(fcount)+"hello.jpg", crop_stick_o);
-                        // // }
-                         
-                        //  fcount ++;
+                        switch(poseState){
+                            case 1:
+                                if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) < 5*eps){
+                                    if(stick_point.size()>DURATION){
+                                        vector<cv::Point > contours;
+                                        cv::approxPolyDP(stick_point, contours, 5, true);
+                                        for (int i = 1; i<contours.size(); ++i ){
+                                            cv::line(cvOutputData, contours[i-1], contours[i], cv::Scalar(0, 0, 255), 5);
+                                        }
+                                        if(contours.size() == 5){
+                                            std::cout<<"On detection: W!"<< std::endl;
+                                        }else if(contours.size() == 4){
+                                            std::cout<<"On detection: 口!"<< std::endl;
+                                        }else if(contours.size() > 5){
+                                            std::cout<<"On detection: O !"<< std::endl;
+                                        }
+                                        std::cout<<" OK!"<< std::endl;
+                                        poseState = -1;
+                                    }
+                                    
+                                    stick_point.clear();
+                                }
+                                break;
+                            case -1:
+                                if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) < 20*eps && gradientK < 0 && RWristx > RElbowx){
+                                    poseState = 1;
+                                    std::cout<<"Ready!"<< std::endl;
+                                }
+                                stick_point.clear();
+                                break;
+                        }
+                        
 
                     }
                 }
