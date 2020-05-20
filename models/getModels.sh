@@ -35,5 +35,5 @@ BODY_25_FOLDER=${POSE_FOLDER}"body_25/"
 # HAND_MODEL=$HAND_FOLDER"pose_iter_102000.caffemodel"
 # wget -c ${OPENPOSE_URL}${HAND_MODEL} -P ${HAND_FOLDER}
 
-wget https://oss.imux.top/public/lenet_iter_10000.caffemodel
+# wget https://oss.imux.top/public/lenet_iter_10000.caffemodel
 wget -c https://oss.imux.top/public/pose_iter_584000.caffemodel -P ${BODY_25_FOLDER}
