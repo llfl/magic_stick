@@ -169,12 +169,16 @@ public:
                                             cv::line(cvOutputData, contours[i-1], contours[i], cv::Scalar(0, 0, 255), 5);
                                         }
                                         if(contours.size() == 5){
+                                            op::opLog("On detection: W!", op::Priority::High);
                                             std::cout<<"On detection: W!"<< std::endl;
                                         }else if(contours.size() == 4){
-                                            std::cout<<"On detection: 口!"<< std::endl;
+                                            op::opLog("On detection: ?!", op::Priority::High);
+                                            std::cout<<"On detection: ?!"<< std::endl;
                                         }else if(contours.size() > 5){
+                                            op::opLog("On detection: O!", op::Priority::High);
                                             std::cout<<"On detection: O !"<< std::endl;
                                         }
+                                        op::opLog("OK!", op::Priority::High);
                                         std::cout<<" OK!"<< std::endl;
                                         poseState = -1;
                                     }
@@ -185,6 +189,7 @@ public:
                             case -1:
                                 if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) < 20*eps && gradientK < 0 && RWristx > RElbowx){
                                     poseState = 1;
+                                    op::opLog("Ready!", op::Priority::High);
                                     std::cout<<"Ready!"<< std::endl;
                                 }
                                 stick_point.clear();
