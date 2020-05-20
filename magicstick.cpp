@@ -19,11 +19,12 @@ using namespace std;
 #define MIN_VELOCITY 100
 
 double eps = 0.01;
-int fin_state = 0;
-int pattern_no = 0;
-int fcount = 0;
 
-vector<vector<int> > stick_point;
+int stallState = 0;
+
+int poseState = -1;
+
+vector<cv::Vec2f > stick_point;
 
 //kalman filter
 
@@ -116,9 +117,6 @@ public:
     {
         try
         {
-            // User's post-processing (after OpenPose processing & before OpenPose outputs) here
-                // datumPtr->cvOutputData: rendered frame with pose or heatmaps
-                // datumPtr->poseKeypoints: Array<float> with the estimated pose
             if (datumsPtr != nullptr && !datumsPtr->empty())
             {
 
@@ -133,298 +131,260 @@ public:
                         double RWristx = poseKeypoints[{person, 4, 0}];
                         double RWristy = poseKeypoints[{person, 4, 1}];
                         if(RElbowx<eps || RElbowy < eps || RWristx < eps || RWristy < eps){
+                            stick_point.clear();
                             continue;
                         }
-                            
-                        // double stick_scale = 2.5;
-                        // cv::circle(cvOutputData, cv::Point(
-                        //     (int)(RWristx + stick_scale * (RWristx - RElbowx)),
-                        //     (int)(RWristy + stick_scale * (RWristy - RElbowy))), 
-                        //     5, cv::Scalar(0, 0, 255), -1);
-                        double y_offset,x_offset;
-                        // double stick_scale = 2;
-                        vector<cv::Vec4f> lines;
-                        cv::Mat crop_stick_o;
-                        cv::Mat crop_stick;
-                        cv::Rect area;
-                        // do {
-                            // stick_scale += 1;
-                            y_offset = STICK_RELATIVE_LENGTH * (RWristy - RElbowy);
-                            x_offset = STICK_RELATIVE_LENGTH * (RWristx - RElbowx);
-                            if(RWristy + y_offset < 0 ) y_offset = 1 - RWristy;
-                            if(RWristy + y_offset > cvOutputData.rows ) y_offset = cvOutputData.rows - RWristy - 1;
-                            if(RWristx + x_offset < 0 ) x_offset = 1 - RWristx;
-                            if(RWristx + x_offset > cvOutputData.cols ) x_offset = cvOutputData.cols - RWristx - 1;
+                        cv::Point2f stick_end = cv::Point2f(RWristx, RWristy);
+                        double gradientK = (RWristy - RElbowy)/(RWristx - RElbowx);
 
-
-                            if (x_offset > 0){
-                                if(y_offset >0){
-                                    area = cv::Rect(int(RWristx), int(RWristy),
-                                    abs(int(x_offset)),
-                                    abs(int(y_offset)));
-                                }else{
-                                    area = cv::Rect(int(RWristx), int(RWristy + y_offset),
-                                    abs(int(x_offset)),
-                                    abs(int(y_offset)));
-                                }
-                            }else{
-                                if(y_offset >0){
-                                    area = cv::Rect(int(RWristx + x_offset), int(RWristy),
-                                    abs(int(x_offset)),
-                                    abs(int(y_offset)));
-                                }else{
-                                    area = cv::Rect(int(RWristx + x_offset), int(RWristy + y_offset),
-                                    abs(int(x_offset)),
-                                    abs(int(y_offset)));
-                                }
-                            }
-                            cv::circle(cvOutputData, cv::Point(
-                            (int)(RWristx + x_offset),
-                            (int)(RWristy + y_offset)), 
-                            5, cv::Scalar(0, 0, 255), -1);
-
-                            crop_stick_o = cvOutputData(area);
-                            if(crop_stick_o.empty()){
-                                break;
-                            }
-
-                            crop_stick_o.copyTo(crop_stick);
-                            
-
-                            cv::cvtColor(crop_stick, crop_stick, cv::COLOR_RGB2GRAY);
-                            cv::Canny(crop_stick, crop_stick, 80, 180, 3, false);
-                            cv::threshold(crop_stick, crop_stick, 170, 255, cv::THRESH_BINARY);
-                            
-                            
-                            // cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 50, 0, 0);
-                            cv::HoughLinesP( crop_stick, lines, 1, CV_PI/180, 30, 30, 10 );
-
-                        // }while(lines.size()<1 && stick_scale < 4);
-                        vector<int>stick_pointy(2);
-                        cv::Point2f kalman_stick;
-                        if(lines.size()>0){
-                            vector<int>stick_end(2);
-                            if(x_offset >0 ){
-                                // cv::circle(crop_stick_o, cv::Point( lines[0][2], lines[0][3]), 5, cv::Scalar(255, 0, 0), -1);
-
-                                stick_end[0] = lines[0][2];
-                                stick_end[1] = lines[0][3];
-                            }else{
-                                // cv::circle(crop_stick_o, cv::Point( lines[0][0], lines[0][1]), 5, cv::Scalar(255, 0, 0), -1);
-                                stick_end[0] = lines[0][0];
-                                stick_end[1] = lines[0][1];
-                            }
-                            stick_end[0] += area.x;
-                            stick_end[1] += area.y;
-                            cv::circle(cvOutputData, cv::Point(stick_end[0],stick_end[1]),
-                                                         5, cv::Scalar(0, 255, 0), -1);
-                            kalman_stick = kalman.run(float(stick_end[0]),
-                                                    float(stick_end[1]));
-                            if(pow(kalman_stick.x - stick_end[0],2) + pow(kalman_stick.y - stick_end[1],2) <= MIN_VELOCITY){
-                                if(stick_point.size() >= EXCLUTION){
-
-
-                                    cv::Mat stick_pattern(cvOutputData.cols, cvOutputData.rows, CV_8UC1, 255);
-                                    int minx, maxx, miny, maxy;
-                                    minx = stick_point[0][0];
-                                    maxx = stick_point[0][0];
-                                    miny = stick_point[0][1];
-                                    maxy = stick_point[0][1];
-
-                                    for (int i = 1; i<stick_point.size(); ++i ){
-                                
-                                        if(minx>stick_point[i][0])minx = stick_point[i][0];
-                                        if(maxx<stick_point[i][0])maxx = stick_point[i][0];
-                                        if(miny>stick_point[i][1])miny = stick_point[i][1];
-                                        if(maxy<stick_point[i][1])maxy = stick_point[i][1];
-
-                                        cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
-                                        cv::Point b(stick_point[i][0],stick_point[i][1]);
-                                        cv::line(stick_pattern, a, b, 0, 10);
-                                    }
-                                    if(minx<0) minx=0;
-                                    if(miny<0) miny=0;
-                                    if(maxy>cvOutputData.rows)maxy=cvOutputData.rows;
-                                    if(maxx>cvOutputData.cols)maxx=cvOutputData.cols;
-                                    int long_side = maxx-minx;
-                                    if(long_side < maxy-miny) long_side = maxy - miny;
-
-                                    cv::Rect area(minx, miny , long_side,long_side);
-
-                                    cv::Mat crop_pattern = stick_pattern(area);
-                                    cv::Mat resize_pattern(28, 28, CV_8UC1);
-                                    cv::resize(crop_pattern, resize_pattern, cv::Size(28,28));
-                                    cv::Mat flip_pattern;
-                                    cv::flip(resize_pattern,flip_pattern, 1);
-                                    cv::Mat float_pattern;
-                                    flip_pattern.convertTo(float_pattern, CV_32FC1);
-                                    pattern_no ++;
-                                    cv::imwrite(std::to_string(pattern_no)+"hello2.jpg", flip_pattern);
-
-                            
-
-                                    cv::String modelTxt = "models/lenet.prototxt";
-                                    cv::String modelBin = "models/lenet_iter_10000.caffemodel";
-                                    cv::dnn::Net net;
-                                    net = cv::dnn::readNetFromCaffe(modelTxt, modelBin);
-                                    cv::Mat inputBlob = cv::dnn::blobFromImage(crop_pattern,1.0f,cv::Size(28,28),128);
-                                    net.setInput(inputBlob, "data");
-                                    std::vector<float> prob = std::vector<float>(net.forward("prob"));
-                                    auto predno = max_element(prob.begin(), prob.end());
-                                    std::cout<<"I guess the pattern is " << predno - prob.begin()<< std::endl;
-                                    op::opLog("over! ", op::Priority::High);
-                                    stick_point.clear();
-                                }else{
-                                    stick_point.clear();
-                                }
-                            }
-                            // if(stick_point.size() == 0){
-                            //     stick_point.push_back(stick_end);
-                            // }
-                            // vector<int>stick_last = stick_point.back();
-                            // if(pow(stick_last[0] - stick_end[0],2) + pow(stick_last[1] - stick_end[1],2) <= MIN_VELOCITY){
-                            //     fin_state = (fin_state + 1) % DURATION;
-                            //     if (fin_state == 0 && stick_point.size() >= EXCLUTION){
-                            //         for (int i = 1; i<stick_point.size(); ++i ){
-                            //             cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
-                            //             cv::Point b(stick_point[i][0],stick_point[i][1]);
-                            //             cv::line(cvOutputData, a, b, 0, 10);
-                            //         }
-                            //     }
-                            // }else{
-                            //     stick_point.push_back(stick_end);
-                            // }
-                        }else{
-                            double s = 5./6.;
-                            kalman_stick = kalman.run(s*(RWristx + x_offset),
-                                                    s*(RWristy + y_offset));
+                        if(stick_point.size() == 0){
+                            stick_point.push_back(stick_end);
+                            continue;
                         }
-                        stick_pointy[0] = int(kalman_stick.x);
-                        stick_pointy[1] = int(kalman_stick.y);
-                        stick_point.push_back(stick_pointy);
-                        // for (int i = 1; i<stick_point.size(); ++i ){
-                        //                 cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
-                        //                 cv::Point b(stick_point[i][0],stick_point[i][1]);
-                        //                 cv::line(cvOutputData, a, b, 0, 5);
-                        //     }
-                        cv::circle(cvOutputData, kalman_stick, 5, cv::Scalar(255, 0, 0), -1);
-                        cv::imwrite("./build/a"+std::to_string(fcount)+"hello.jpg", cvOutputData);
-                        //  if(!crop_stick_o.empty()){
-                        //     cv::imwrite("./build/b"+std::to_string(fcount)+"hello.jpg", crop_stick_o);
-                        // }
-                         
-                         fcount ++;
+                        cv::Point2f stick_last = stick_point.back();
+                        double gradientG = (stick_end.y - stick_last.y)/(stick_end.x - stick_last.x);
+                        switch(poseState){
+                            case 1:
+                                    if(gradientG < -0.5 && gradientG >= -2 && stick_end.x < stick_last.x){
+                                        poseState = 2;
+                                    }else if( (gradientG < -2 || gradientG > 2) && stick_end.y > stick_last.y){
+                                        poseState = 31;
+                                    }else if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x < stick_last.x){
+                                        poseState = 32;
+                                    }else{
+                                        poseState = 4;
+                                    }
+                                    break;
+                            case 2:
+                                    if(gradientG < -0.5 && gradientG >= -2 && stick_end.x < stick_last.x){
+                                        poseState = 2;
+                                    }else if(gradientG > 0 && stick_end.x < stick_last.x){
+                                        poseState = 20;
+                                    }else{
+                                        poseState = -1;
+                                    }
+                                    break;
+                            case 20:
+                                    if(gradientG > 0 && stick_end.x < stick_last.x){
+                                        poseState = 20;
+                                    }else if(gradientG < -0.5 && stick_end.x < stick_last.x){
+                                        poseState = 200;
+                                    } else{
+                                        poseState = -1;
+                                    }
+                                    break;
+                            case 200:
+                                    if(gradientG < -0.5 && stick_end.x < stick_last.x){
+                                        poseState = 200;
+                                    }else if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
+                                        stallState = (stallState + 1) % DURATION;
+                                        if(stallState == 0  && gradientK > 0 && RWristx < RElbowx){
+                                            std::cout<<"On detection : W " << std::endl;
+                                            poseState = -1;
+                                        }
+                                    }else{
+                                        poseState = -1;
+                                        stallState = 0;
+                                    }
+                                    break;
 
-                    
+                            case 31:
+                                    if((gradientG < -2 || gradientG > 2) && stick_end.y > stick_last.y){
+                                        poseState = 31;
+                                    }else if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x < stick_last.x){
+                                        poseState = 310;
+                                    }else{
+                                        poseState = -1;
+                                    }
+                                    break;
+                            case 310:
+                                    if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x < stick_last.x){
+                                        poseState = 310;
+                                    }else if((gradientG < -2 || gradientG > 2) && stick_end.y < stick_last.y){
+                                        poseState = 3100;
+                                    }else{
+                                        poseState = -1;
+                                    }
+                                    break;
 
+                            case 3100:
+                                    if((gradientG < -2 || gradientG > 2) && stick_end.y < stick_last.y){
+                                        poseState = 3100;
+                                    }else if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
+                                        stallState = (stallState + 1) % DURATION;
+                                        if(stallState == 0  && gradientK > 0 && RWristx < RElbowx){
+                                            std::cout<<"On detection : 口 " << std::endl;
+                                            poseState = -1;
+                                        }
+                                    }else{
+                                        poseState = -1;
+                                        stallState = 0;
+                                    }
+                                    break;
 
+                            case 32:
+                                    if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x < stick_last.x){
+                                        poseState = 32;
+                                    }else if((gradientG < -2 || gradientG > 2) && stick_end.y > stick_last.y){
+                                        poseState = 320;
+                                    }else{
+                                        poseState = -1;
+                                    }
+                                    break;
+                            case 320:
+                                    if((gradientG < -2 || gradientG > 2) && stick_end.y > stick_last.y){
+                                        poseState = 320;
+                                    }else if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x > stick_last.x){
+                                        poseState = 3200;
+                                    }else{
+                                        poseState = -1;
+                                    }
+                                    break;
+                            case 3200:
+                                    if(gradientG >= -0.5 && gradientG < 0.5 && stick_end.x > stick_last.x){
+                                        poseState = 3200;
+                                    }else if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
+                                        stallState = (stallState + 1) % DURATION;
+                                        if(stallState == 0  && gradientK > 0 && RWristx < RElbowx){
+                                            std::cout<<"On detection : 口 " << std::endl;
+                                            poseState = -1;
+                                        }
+                                    }else{
+                                        poseState = -1;
+                                        stallState = 0;
+                                    }
+                                    break;
+                            case 4:
+                                    if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
+                                        stallState = (stallState + 1) % DURATION;
+                                        if(stallState == 0  && gradientK > 0 && RWristx < RElbowx){
+                                            std::cout<<"On detection : O " << std::endl;
+                                            poseState = -1;
+                                        }
+                                    }else{
+                                        poseState = 4;
+                                    }
+                                    break;
+
+                            default:
+                                    if(pow(stick_last.x - stick_end.x, 2) + pow(stick_last.y - stick_end.y, 2) <= MIN_VELOCITY){
+                                        stallState = (stallState + 1) % DURATION;
+                                        if(stallState == 0 && poseState == -1 && gradientK < 0 && RWristx > RElbowx){
+                                            poseState = 1;
+                                        }
+                                    }else{
+                                            poseState = -1;
+                                    }
+                        }
                         
-                    //     vector<int>stick_end(2);
-                    //     stick_end[0] = (int)(RWristx + STICK_RELATIVE_LENGTH * (RWristx - RElbowx));
-                    //     stick_end[1] = (int)(RWristy + STICK_RELATIVE_LENGTH * (RWristy - RElbowy));
-                    //     if(stick_point.size() == 0)
-                    //     {
-                    //         stick_point.push_back(stick_end);
-                    //     }
-                    //     vector<int>stick_last = stick_point.back();
-                    //     if(pow(stick_last[0] - stick_end[0],2) + pow(stick_last[1] - stick_end[1],2) <= MIN_VELOCITY)
-                    // {
-                    //     fin_state = (fin_state + 1) % DURATION;
-                    //     if (fin_state == 0 && stick_point.size() >= EXCLUTION)
-                    //     {
-                    //         cv::Mat stick_pattern(cvOutputData.rows, cvOutputData.cols, CV_8UC1, 255);
-                    //         int minx, maxx, miny, maxy;
-                    //         minx = stick_point[0][0];
-                    //         maxx = stick_point[0][0];
-                    //         miny = stick_point[0][1];
-                    //         maxy = stick_point[0][1];
-
-                    //         for (int i = 1; i<stick_point.size(); ++i )
-                    //         {
-                    //             // stick_pattern.at<cv::Vec3b>(stick_point[i][0],stick_point[i][1]) = 0;
-                    //             if(minx>stick_point[i][0])minx = stick_point[i][0];
-                    //             if(maxx<stick_point[i][0])maxx = stick_point[i][0];
-                    //             if(miny>stick_point[i][1])miny = stick_point[i][1];
-                    //             if(maxy<stick_point[i][1])maxy = stick_point[i][1];
-
-                    //             cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
-                    //             cv::Point b(stick_point[i][0],stick_point[i][1]);
-                    //             cv::line(stick_pattern, a, b, 0, 10);
-                    //         }
-                    //         int long_side = maxx-minx;
-                    //         if(long_side < maxy-miny) long_side = maxy - miny;
-                    //         cv::Rect area(minx-16, miny-16 , long_side+16,long_side+16);
-                    //         // cv::Mat resize_pattern = stick_pattern(area);
-                    //         cv::Mat crop_pattern = stick_pattern(area);
-                    //         cv::Mat resize_pattern(28, 28, CV_8UC1);
-                    //         cv::resize(crop_pattern, resize_pattern, cv::Size(28,28));
-                    //         cv::Mat flip_pattern;
-                    //         cv::flip(resize_pattern,flip_pattern, 1);
-                    //         cv::Mat float_pattern;
-                    //         flip_pattern.convertTo(float_pattern, CV_32FC1);
-                    //         // cv::Mat normalized_pattern;
-                    //         // cv::subtract(float_pattern, mean_, normalized_pattern);
-                    //         pattern_no ++;
-                    //         // cv::imshow(std::to_string(pattern_no), resize_pattern);
-                    //         cv::imwrite(std::to_string(pattern_no)+"hello2.jpg", flip_pattern);
-
-                    //         // caffe::Caffe::set_mode(caffe::Caffe::GPU);
-                    //         // caffe::Net<float> lenet("models/lenet.prototxt",caffe::TEST);
-                    //         // lenet.CopyTrainedLayersFrom("models/lenet_iter_10000.caffemodel");
-                    //         // caffe::Blob<float> *input_ptr = lenet.input_blobs()[0];
-                    //         // input_ptr->Reshape(1,1,28,28);
-
-                    //         // caffe::Blob<float> *output_ptr= lenet.output_blobs()[0];
-                    //         // output_ptr->Reshape(1,10,1,1);
-
-                    //         // input_ptr->set_cpu_data(reinterpret_cast<float*>(float_pattern.data));
-                    //         // lenet.Forward();
-                    //         // const float* begin = output_ptr->gpu_data();
-    
-
-                    //         // int index=0;
-                    //         // for(int i=1;i<10;i++)
-                    //         // {
-                    //         //     if(begin[index]<begin[i])
-                    //         //         index=i;
-                    //         // }
-
-                    //         cv::String modelTxt = "models/lenet.prototxt";
-                    //         cv::String modelBin = "models/lenet_iter_10000.caffemodel";
-                    //         cv::dnn::Net net;
-                    //         net = cv::dnn::readNetFromCaffe(modelTxt, modelBin);
-                    //         cv::Mat inputBlob = cv::dnn::blobFromImage(crop_pattern,1.0f,cv::Size(28,28),128);
-                    //         net.setInput(inputBlob, "data");
-                    //         std::vector<float> prob = std::vector<float>(net.forward("prob"));
-                    //         auto predno = max_element(prob.begin(), prob.end());
-                    //         std::cout<<"I guess the pattern is " << predno - prob.begin()<< std::endl;
-                    //         op::opLog("over! ", op::Priority::High);
-                    //         // std::cout<<""<<std::endl;
-                    //         stick_point.clear();
-                    // }
-                    
-                    //     }
-
-                    //     else if(fin_state == 0 && stick_point.size() < EXCLUTION)
-                    // {
-                    //     stick_point.clear();
-                    // }
-                    //     else{
-                    //         stick_point.push_back(stick_end);
-                    //     }
-                    //     // stick_point.push_back(stick_end);
 
 
-                    //     cv::Point current_stick_end(stick_end[0],stick_end[1]);
-                    //     cv::circle(cvOutputData, current_stick_end, 5, cv::Scalar(0, 0, 255), -1);
-                    //     for (int i = 1; i<stick_point.size(); ++i )
-                    //     {
-                    //         cv::Point a(stick_point[i-1][0],stick_point[i-1][1]);
-                    //         cv::Point b(stick_point[i][0],stick_point[i][1]);
-                    //         cv::line(cvOutputData, a, b, cv::Scalar(0, 255, 0), 10);
-                    //     }
 
-                        // cv::bitwise_not(cvOutputData, cvOutputData);
+                        // double y_offset,x_offset;
+                        // // double stick_scale = 2;
+                        // vector<cv::Vec4f> lines;
+                        // cv::Mat crop_stick_o;
+                        // cv::Mat crop_stick;
+                        // cv::Rect area;
+                        // // do {
+                        //     // stick_scale += 1;
+                        //     y_offset = STICK_RELATIVE_LENGTH * (RWristy - RElbowy);
+                        //     x_offset = STICK_RELATIVE_LENGTH * (RWristx - RElbowx);
+                        //     if(RWristy + y_offset < 0 ) y_offset = 1 - RWristy;
+                        //     if(RWristy + y_offset > cvOutputData.rows ) y_offset = cvOutputData.rows - RWristy - 1;
+                        //     if(RWristx + x_offset < 0 ) x_offset = 1 - RWristx;
+                        //     if(RWristx + x_offset > cvOutputData.cols ) x_offset = cvOutputData.cols - RWristx - 1;
+
+
+                        //     if (x_offset > 0){
+                        //         if(y_offset >0){
+                        //             area = cv::Rect(int(RWristx), int(RWristy),
+                        //             abs(int(x_offset)),
+                        //             abs(int(y_offset)));
+                        //         }else{
+                        //             area = cv::Rect(int(RWristx), int(RWristy + y_offset),
+                        //             abs(int(x_offset)),
+                        //             abs(int(y_offset)));
+                        //         }
+                        //     }else{
+                        //         if(y_offset >0){
+                        //             area = cv::Rect(int(RWristx + x_offset), int(RWristy),
+                        //             abs(int(x_offset)),
+                        //             abs(int(y_offset)));
+                        //         }else{
+                        //             area = cv::Rect(int(RWristx + x_offset), int(RWristy + y_offset),
+                        //             abs(int(x_offset)),
+                        //             abs(int(y_offset)));
+                        //         }
+                        //     }
+                        //     cv::circle(cvOutputData, cv::Point(
+                        //     (int)(RWristx + x_offset),
+                        //     (int)(RWristy + y_offset)), 
+                        //     5, cv::Scalar(0, 0, 255), -1);
+
+                        //     crop_stick_o = cvOutputData(area);
+                        //     if(crop_stick_o.empty()){
+                        //         break;
+                        //     }
+
+                        //     crop_stick_o.copyTo(crop_stick);
+                            
+
+                        //     cv::cvtColor(crop_stick, crop_stick, cv::COLOR_RGB2GRAY);
+                        //     cv::Canny(crop_stick, crop_stick, 80, 180, 3, false);
+                        //     cv::threshold(crop_stick, crop_stick, 170, 255, cv::THRESH_BINARY);
+                            
+                            
+                        //     // cv::HoughLines(crop_stick, lines, 1, CV_PI / 180, 50, 0, 0);
+                        //     cv::HoughLinesP( crop_stick, lines, 1, CV_PI/180, 30, 30, 10 );
+
+                        // // }while(lines.size()<1 && stick_scale < 4);
+                        // vector<int>stick_pointy(2);
+                        // cv::Point2f kalman_stick;
+                        // if(lines.size()>0){
+                        //     vector<int>stick_end(2);
+                        //     if(x_offset >0 ){
+                        //         // cv::circle(crop_stick_o, cv::Point( lines[0][2], lines[0][3]), 5, cv::Scalar(255, 0, 0), -1);
+
+                        //         stick_end[0] = lines[0][2];
+                        //         stick_end[1] = lines[0][3];
+                        //     }else{
+                        //         // cv::circle(crop_stick_o, cv::Point( lines[0][0], lines[0][1]), 5, cv::Scalar(255, 0, 0), -1);
+                        //         stick_end[0] = lines[0][0];
+                        //         stick_end[1] = lines[0][1];
+                        //     }
+                        //     stick_end[0] += area.x;
+                        //     stick_end[1] += area.y;
+                        //     cv::circle(cvOutputData, cv::Point(stick_end[0],stick_end[1]),
+                        //                                  5, cv::Scalar(0, 255, 0), -1);
+                        //     kalman_stick = kalman.run(float(stick_end[0]),
+                        //                             float(stick_end[1]));
+                        //     if(pow(kalman_stick.x - stick_end[0],2) + pow(kalman_stick.y - stick_end[1],2) <= MIN_VELOCITY){
+                        //         if(stick_point.size() >= EXCLUTION){
+
+                        //             stick_point.clear();
+                        //         }else{
+                        //             stick_point.clear();
+                        //         }
+                        //     }
+                        // }else{
+                        //     double s = 5./6.;
+                        //     kalman_stick = kalman.run(s*(RWristx + x_offset),
+                        //                             s*(RWristy + y_offset));
+                        // }
+                        // stick_pointy[0] = int(kalman_stick.x);
+                        // stick_pointy[1] = int(kalman_stick.y);
+                        // stick_point.push_back(stick_pointy);
+                        
+
+                        // cv::circle(cvOutputData, kalman_stick, 5, cv::Scalar(255, 0, 0), -1);
+                        // cv::imwrite("./build/a"+std::to_string(fcount)+"hello.jpg", cvOutputData);
+                        // //  if(!crop_stick_o.empty()){
+                        // //     cv::imwrite("./build/b"+std::to_string(fcount)+"hello.jpg", crop_stick_o);
+                        // // }
+                         
+                        //  fcount ++;
+
                     }
                 }
             }
